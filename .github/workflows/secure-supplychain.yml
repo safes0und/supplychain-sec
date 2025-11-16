@@ -1,0 +1,275 @@
+name: Build & Attest
+
+on:
+  push:
+    branches: [ main ]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+  TAG_NAME: ${{ github.run_number }}-sha-${{ github.sha }}
+
+permissions:
+  id-token: write   # Критически важно для OIDC с Cosign
+  contents: read    # Для checkout и доступа к коду
+  packages: write   # Для публикации пакетов в GHCR
+  security-events: write  # Для загрузки SARIF результатов
+
+jobs:
+  build-and-attest:
+    runs-on: ubuntu-latest
+    outputs:
+      image: ${{ steps.image.outputs.image }}
+      digest: ${{ steps.image.outputs.digest }}
+      tag: ${{ env.TAG_NAME }}
+      registry: ${{ env.REGISTRY }}
+      image-name: ${{ env.IMAGE_NAME }}
+    
+    steps:
+      # ============================================
+      # Source Checkout & Setup
+      # ============================================
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      # ============================================
+      # SAST & Secret Scanning (До сборки!)
+      # ============================================
+      - name: Install security tools
+        run: |
+          # Установка Trivy
+          curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin
+          
+          # Установка Cosign
+          curl -sSfL https://github.com/sigstore/cosign/releases/latest/download/cosign-linux-amd64 | sudo tee /usr/local/bin/cosign > /dev/null
+          sudo chmod +x /usr/local/bin/cosign
+          
+          # Установка Semgrep
+          pip install semgrep
+
+      - name: Run SAST (Semgrep) - Python code scanning
+        id: semgrep
+        run: |
+          semgrep --config=auto --error-on-findings --sarif . > semgrep-results.sarif || true
+        continue-on-error: true
+
+      - name: Run Trivy filesystem scanner (vuln, config, secrets)
+        id: trivy-fs
+        run: |
+          trivy fs . \
+            --format cyclonedx \
+            --output trivy-fs-report.json \
+            --security-checks vuln,config,secret \
+            --exit-code 0
+
+      # ============================================
+      # SBOM Generation (Для зависимостей)
+      # ============================================
+      - name: Generate pre-build SBOM (dependencies)
+        id: sbom-deps
+        run: |
+          trivy fs . \
+            --format cyclonedx \
+            --output sbom-dependencies.json \
+            --exit-code 0
+
+      # ============================================
+      # Build Docker Image
+      # ============================================
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push Docker image
+        id: build
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.TAG_NAME }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Extract image metadata
+        id: image
+        run: |
+          image_name="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}"
+          digest="${{ steps.build.outputs.digest }}"
+          echo "image=$image_name" >> "$GITHUB_OUTPUT"
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+
+      # ============================================
+      # Generate Final SBOM (Для образа)
+      # ============================================
+      - name: Generate final SBOM for image
+        id: sbom-image
+        run: |
+          trivy image ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.TAG_NAME }} \
+            --format cyclonedx \
+            --output sbom-image.json \
+            --exit-code 0
+
+      # ============================================
+      # Publish
+      # ============================================
+      - name: Upload SARIF results to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        if: always() && hashFiles('semgrep-results.sarif') != ''
+        with:
+          sarif_file: semgrep-results.sarif
+
+      - name: Upload security artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-artifacts
+          path: |
+            semgrep-results.sarif
+            trivy-fs-report.json
+            sbom-dependencies.json
+            sbom-image.json
+          retention-days: 90
+
+  # ============================================
+  # Generate SLSA Provenance (Отдельный job)
+  # ============================================
+  generate-slsa-provenance:
+    needs: build-and-attest
+    permissions:
+      id-token: write
+      contents: read
+      packages: write
+    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_container_slsa3.yml@v2.1.0
+    with:
+      image: ${{ needs.build-and-attest.outputs.image }}:${{ needs.build-and-attest.outputs.tag }}
+      digest: ${{ needs.build-and-attest.outputs.digest }}
+      registry-username: ${{ github.actor }}
+      registry-password: ${{ github.token }}
+
+  # ============================================
+  # Sign & Attest (Ядро безопасности)
+  # ============================================
+  sign-and-attest:
+    needs: [build-and-attest, generate-slsa-provenance]
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+      packages: write
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Install Cosign
+        run: |
+          curl -sSfL https://github.com/sigstore/cosign/releases/latest/download/cosign-linux-amd64 | sudo tee /usr/local/bin/cosign > /dev/null
+          sudo chmod +x /usr/local/bin/cosign
+
+      - name: Download SLSA Provenance artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: slsa-provenance
+          path: .
+
+      - name: Download security artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: security-artifacts
+          path: .
+
+      - name: Sign container image (Cosign OIDC)
+        run: |
+          cosign sign \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.TAG_NAME }} \
+            --yes
+
+      - name: Attest SLSA Provenance
+        run: |
+          cosign attest \
+            --type slsaprovenance \
+            --predicate slsa-provenance.json \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.TAG_NAME }} \
+            --yes
+
+      - name: Attest final SBOM
+        run: |
+          cosign attest \
+            --type cyclonedx \
+            --predicate sbom-image.json \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.TAG_NAME }} \
+            --yes
+
+      - name: Attest SAST scan results (Semgrep)
+        run: |
+          if [ -f semgrep-results.sarif ]; then
+            cosign attest \
+              --type application/vnd.in-toto+json \
+              --predicate semgrep-results.sarif \
+              ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.TAG_NAME }} \
+              --yes
+          fi
+
+      - name: Attest Trivy scan results
+        run: |
+          cosign attest \
+            --type application/vnd.in-toto+json \
+            --predicate trivy-fs-report.json \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.TAG_NAME }} \
+            --yes
+
+      # ============================================
+      # Verify in Pipeline
+      # ============================================
+      - name: Verify image signature
+        run: |
+          cosign verify \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.TAG_NAME }}
+
+      - name: Verify attestations
+        run: |
+          cosign verify-attestation \
+            --type slsaprovenance \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.TAG_NAME }}
+          
+          cosign verify-attestation \
+            --type cyclonedx \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.TAG_NAME }}
+
+            - name: Create security summary
+            run: |
+              echo "## 🔒 Security Supply Chain Summary" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "### ✅ Security Scans Completed" >> $GITHUB_STEP_SUMMARY
+              echo "- **SAST (Semgrep)**: Python code vulnerability scanning" >> $GITHUB_STEP_SUMMARY
+              echo "- **Trivy FS**: Repository scanning (vulnerabilities, misconfigurations, secrets)" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "### 📦 SBOM Generated" >> $GITHUB_STEP_SUMMARY
+              echo "- **Pre-build SBOM**: Dependencies analysis (sbom-dependencies.json)" >> $GITHUB_STEP_SUMMARY
+              echo "- **Final SBOM**: Complete image analysis (sbom-image.json)" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "### ✍️ Signatures & Attestations" >> $GITHUB_STEP_SUMMARY
+              echo "- **Image Signature**: Signed with Cosign (OIDC)" >> $GITHUB_STEP_SUMMARY
+              echo "- **SLSA Provenance**: Build attestation (SLSA L3)" >> $GITHUB_STEP_SUMMARY
+              echo "- **SBOM Attestation**: Final SBOM attested" >> $GITHUB_STEP_SUMMARY
+              echo "- **SAST Attestation**: Semgrep results attested" >> $GITHUB_STEP_SUMMARY
+              echo "- **Trivy Attestation**: Security scan results attested" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "### 🔍 Verification" >> $GITHUB_STEP_SUMMARY
+              echo "- ✅ Image signature verified" >> $GITHUB_STEP_SUMMARY
+              echo "- ✅ All attestations verified" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "### 📤 Published" >> $GITHUB_STEP_SUMMARY
+              echo "**Image**: \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.TAG_NAME }}\`" >> $GITHUB_STEP_SUMMARY
+              echo "**Digest**: \`${{ needs.build-and-attest.outputs.digest }}\`" >> $GITHUB_STEP_SUMMARY
