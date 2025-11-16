@@ -151,11 +151,8 @@ jobs:
       actions: read
     uses: slsa-framework/slsa-github-generator/.github/workflows/generator_container_slsa3.yml@v2.1.0
     with:
-      registry-username: ${{ github.actor }}
       image: ${{ needs.build-and-attest.outputs.image }}:${{ needs.build-and-attest.outputs.tag }}
       digest: ${{ needs.build-and-attest.outputs.digest }}
-    secrets:
-      registry-password: ${{ secrets.GHCR_PAT }}
 
   # ============================================
   # Sign & Attest (Ядро безопасности)
@@ -197,13 +194,13 @@ jobs:
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.TAG_NAME }} \
             --yes
 
-      - name: Attest SLSA Provenance
-        run: |
-          cosign attest \
-            --type slsaprovenance \
-            --predicate slsa-provenance.json \
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.TAG_NAME }} \
-            --yes
+    #   - name: Attest SLSA Provenance
+    #     run: |
+    #       cosign attest \
+    #         --type slsaprovenance \
+    #         --predicate slsa-provenance.json \
+    #         ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.TAG_NAME }} \
+    #         --yes
 
       - name: Attest final SBOM
         run: |
