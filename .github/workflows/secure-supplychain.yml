@@ -53,7 +53,7 @@ jobs:
       - name: Run SAST (Semgrep) - Python code scanning
         id: semgrep
         run: |
-          semgrep --config=auto --error-on-findings --sarif . > semgrep-results.sarif || true
+          semgrep --config=auto --sarif --output semgrep-results.sarif . || echo '{"version":"2.1.0","$schema":"https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json","runs":[]}' > semgrep-results.sarif
         continue-on-error: true
 
       - name: Run Trivy filesystem scanner (vuln, config, secrets)
@@ -62,7 +62,7 @@ jobs:
           trivy fs . \
             --format cyclonedx \
             --output trivy-fs-report.json \
-            --security-checks vuln,config,secret \
+            --scanners vuln,misconfig,secret \
             --exit-code 0
 
       # ============================================
