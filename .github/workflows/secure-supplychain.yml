@@ -151,8 +151,11 @@ jobs:
       actions: read
     uses: slsa-framework/slsa-github-generator/.github/workflows/generator_container_slsa3.yml@v2.1.0
     with:
+      registry-username: ${{ github.actor }}
       image: ${{ needs.build-and-attest.outputs.image }}:${{ needs.build-and-attest.outputs.tag }}
       digest: ${{ needs.build-and-attest.outputs.digest }}
+    secrets:
+      registry-password: ${{ secrets.GHCR_PAT }}
 
   # ============================================
   # Sign & Attest (Ядро безопасности)
