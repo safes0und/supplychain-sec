@@ -153,6 +153,11 @@ jobs:
     with:
       image: ${{ needs.build-and-attest.outputs.image }}:${{ needs.build-and-attest.outputs.tag }}
       digest: ${{ needs.build-and-attest.outputs.digest }}
+      registry-username: ${{ github.actor }}
+    secrets:
+      registry-password: ${{ secrets.GITHUB_TOKEN }}
+      
+
 
   # ============================================
   # Sign & Attest (Ядро безопасности)
