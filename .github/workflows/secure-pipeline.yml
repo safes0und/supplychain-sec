@@ -186,7 +186,6 @@ jobs:
     with:
       image: ${{ needs.build-scan-attest.outputs.image }}:${{ needs.build-scan-attest.outputs.tag }}
       digest: ${{ needs.build-scan-attest.outputs.digest }}
-      upload-assets: true
       registry-username: ${{ github.actor }}
       registry-password: ${{ github.token }}
 
