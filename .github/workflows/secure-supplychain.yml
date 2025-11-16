@@ -10,7 +10,7 @@ env:
   TAG_NAME: ${{ github.run_number }}-sha-${{ github.sha }}
 
 permissions:
-  id-token: write   # Критически важно для OIDC с Cosign
+  id-token: write   # Критически важно для OIDC с Cosign.
   contents: read    # Для checkout и доступа к коду
   packages: write   # Для публикации пакетов в GHCR
   security-events: write  # Для загрузки SARIF результатов
