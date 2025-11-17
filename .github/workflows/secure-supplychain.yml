@@ -404,6 +404,7 @@ jobs:
             --link-dir .
       - name: Sign container image (Cosign OIDC)
         run: |
+          COSIGN_EXPERIMENTAL=1 \
           cosign sign \
             "${IMAGE_WITH_DIGEST}" \
             --yes
@@ -413,6 +414,7 @@ jobs:
           sha256sum slsa-provenance.intoto.jsonl slsa-provenance.statement.json slsa-provenance.predicate.json
       - name: Attest final SBOM
         run: |
+          COSIGN_EXPERIMENTAL=1 \  
           cosign attest \
             --type https://cyclonedx.org/bom \
             --predicate sbom-image.json \
@@ -421,6 +423,7 @@ jobs:
       - name: Attest dependency SBOM
         run: |
           if [ -f sbom-dependencies.json ]; then
+            COSIGN_EXPERIMENTAL=1 \
             cosign attest \
               --type https://cyclonedx.org/bom \
               --predicate sbom-dependencies.json \
@@ -430,6 +433,7 @@ jobs:
       - name: Attest SAST scan results (Semgrep)
         run: |
           if [ -f semgrep-results.json ]; then
+            COSIGN_EXPERIMENTAL=1 \
             cosign attest \
               --type https://semgrep.dev/scan-result/v0.1 \
               --predicate semgrep-results.json \
@@ -438,6 +442,7 @@ jobs:
           fi
       - name: Attest Trivy scan results
         run: |
+          COSIGN_EXPERIMENTAL=1 \
           cosign attest \
             --type https://aquasecurity.github.io/trivy/vulnerability-scan/v0.1 \
             --predicate trivy-fs-report.json \
@@ -449,6 +454,7 @@ jobs:
       - name: Verify image signature with OIDC identity
         run: |
           # Verify keyless signature with certificate identity
+          COSIGN_EXPERIMENTAL=1 \
           cosign verify \
             --certificate-identity "https://github.com/${{ github.repository }}/.github/workflows/secure-supplychain.yml@refs/heads/main" \
             --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
@@ -456,6 +462,7 @@ jobs:
       - name: Verify attestations with OIDC identity
         run: |
           # Верификация SLSA provenance
+          COSIGN_EXPERIMENTAL=1 \
           cosign verify-attestation \
             --type slsaprovenance \
             --certificate-identity "https://github.com/slsa-framework/slsa-github-generator/.github/workflows/generator_container_slsa3.yml@refs/tags/v2.1.0" \
@@ -463,18 +470,21 @@ jobs:
             "${IMAGE_WITH_DIGEST}"
           
           # Верификация SBOM attestation
+          COSIGN_EXPERIMENTAL=1 \
           cosign verify-attestation \
             --type https://cyclonedx.org/bom \
             --certificate-identity "https://github.com/${{ github.repository }}/.github/workflows/secure-supplychain.yml@refs/heads/main" \
             --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
             "${IMAGE_WITH_DIGEST}"
           # Верификация Semgrep attestation
+          COSIGN_EXPERIMENTAL=1 \
           cosign verify-attestation \
             --type https://semgrep.dev/scan-result/v0.1 \
             --certificate-identity "https://github.com/${{ github.repository }}/.github/workflows/secure-supplychain.yml@refs/heads/main" \
             --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
             "${IMAGE_WITH_DIGEST}"
           # Верификация Trivy attestation
+          COSIGN_EXPERIMENTAL=1 \
           cosign verify-attestation \
             --type https://aquasecurity.github.io/trivy/vulnerability-scan/v0.1 \
             --certificate-identity "https://github.com/${{ github.repository }}/.github/workflows/secure-supplychain.yml@refs/heads/main" \
