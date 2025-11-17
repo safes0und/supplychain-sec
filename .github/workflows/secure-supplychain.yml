@@ -464,7 +464,7 @@ jobs:
       - name: Verify SLSA provenance attestation with slsa-verifier
         run: |
           slsa-verifier verify-image \
-            --source-uri "https://github.com/${{ github.repository }}" \
+            --source-uri "${{ github.repository }}" \
             --source-tag "${{ github.ref_name }}" \
             --provenance-path slsa-provenance.intoto.jsonl \
             "${IMAGE_WITH_DIGEST}"
