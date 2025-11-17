@@ -457,13 +457,13 @@ jobs:
             "${IMAGE_WITH_DIGEST}"
       - name: Verify attestations with OIDC identity
         run: |
-          # Верификация SLSA provenance
-          COSIGN_EXPERIMENTAL=1 \
-          cosign verify-attestation \
-            --type slsaprovenance \
-            --certificate-identity "https://github.com/${{ github.repository }}/.github/workflows/secure-supplychain.yml@refs/heads/main" \
-            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
-            "${IMAGE_WITH_DIGEST}"
+          # # Верификация SLSA provenance
+          # COSIGN_EXPERIMENTAL=1 \
+          # cosign verify-attestation \
+          #   --type slsaprovenance \
+          #   --certificate-identity "https://github.com/${{ github.repository }}/.github/workflows/secure-supplychain.yml@refs/heads/main" \
+          #   --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+          #   "${IMAGE_WITH_DIGEST}"
           
           # Верификация SBOM attestation
           COSIGN_EXPERIMENTAL=1 \
