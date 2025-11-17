@@ -417,8 +417,8 @@ jobs:
               # layout_path, layout_key_paths определяют правила
               # link_dir содержит все .link файлы от каждого шага
               in_toto_verify(
-                  layout_path="supply-chain.layout",
-                  layout_key_paths=["functionary-key.pub"],
+                  layout="supply-chain.layout",
+                  verification-keys=["functionary-key.pub"],
                   link_dir="."
               )
               print("✅ in-toto supply chain verification PASSED")
