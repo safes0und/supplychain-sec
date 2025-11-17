@@ -96,7 +96,6 @@ jobs:
           python3 - <<'PYEOF'
           from in_toto.models.layout import Layout, Step
           from in_toto.models.metadata import Metablock
-          import json
           
           # Создаём layout с определением шагов
           layout = Layout()
@@ -129,9 +128,9 @@ jobs:
           # Inspection для проверки финального образа
           # (можно расширить по мере надобности)
           
-          # Сохраняем layout как JSON для дальнейшей верификации
-          with open("supply-chain.layout", "w") as f:
-              json.dump(layout.to_dict(), f, indent=2)
+          # Обёртываем layout в Metablock и сохраняем
+          metablock = Metablock(signed=layout)
+          metablock.dump("supply-chain.layout")
           
           print("in-toto layout created: supply-chain.layout")
           PYEOF
