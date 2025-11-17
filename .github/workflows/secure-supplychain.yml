@@ -90,14 +90,15 @@ jobs:
           echo "Functionary key generated"
       - name: Create in-toto layout
         run: |
-          # Считываем публичный ключ functionary-key.pub в переменную pub_key
-          with open("functionary-key.pub", "r") as key_file:
-              pub_key = key_file.read()
 
           # Создаём layout для supply chain
           python3 - <<'PYEOF'
           from in_toto.models.layout import Layout, Step
           from in_toto.models.metadata import Metablock
+
+          # Считываем публичный ключ functionary-key.pub в переменную pub_key
+          with open("functionary-key.pub", "r") as key_file:
+            pub_key = key_file.read()
           
           # Создаём layout с определением шагов
           layout = Layout()
