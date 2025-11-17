@@ -332,6 +332,7 @@ jobs:
           first_line=$(head -n 1 slsa-provenance.intoto.jsonl)
           printf '%s' "$first_line" | jq -r '.payload' | base64 --decode > slsa-provenance.statement.json
           jq '.predicate' slsa-provenance.statement.json > slsa-provenance.predicate.json
+          
       - name: Upload SLSA provenance artifact
         uses: actions/upload-artifact@v4
         with:
@@ -464,7 +465,7 @@ jobs:
       - name: Verify SLSA provenance attestation with slsa-verifier
         run: |
           slsa-verifier verify-image \
-            --source-uri "${{ github.repository }}" \
+            --source-uri "git+https://github.com/${{ github.repository }}" \
             --source-tag "${{ github.ref_name }}" \
             --provenance-path slsa-provenance.intoto.jsonl \
             "${IMAGE_WITH_DIGEST}"
