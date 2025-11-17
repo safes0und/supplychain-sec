@@ -90,12 +90,12 @@ jobs:
           echo "Functionary key generated"
       - name: Create in-toto layout
         run: |
-
+          pip install in-toto
           # Создаём layout для supply chain
           python3 - <<'PYEOF'
           from in_toto.models.layout import Layout, Step
           from in_toto.models.metadata import Metablock
-          from securesystemslib import *
+          from securesystemslib.interface import import_rsa_publickey_from_file
 
           # Считываем публичный ключ functionary-key.pub в переменную functionary_keyid
           functionary_key = import_rsa_publickey_from_file("functionary-key.pub")
