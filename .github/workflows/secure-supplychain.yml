@@ -100,13 +100,14 @@ jobs:
           # functionary_key = import_rsa_publickey_from_file("functionary-key.pub")
           # functionary_keyid = functionary_key["keyid"]
 
-          functionary_keys = layout.add_functionary_keys_from_paths(["functionary-key.pub"])
-          functionary_keyid = list(functionary_keys.keys())
+
           
           # Создаём layout с определением шагов
           layout = Layout()
           layout._type = "layout"
           layout.expires = "2030-12-31T23:59:59Z"
+          functionary_keys = layout.add_functionary_keys_from_paths(["functionary-key.pub"])
+          functionary_keyid = list(functionary_keys.keys())
           
           # Шаг 1: SAST сканирование
           step_sast = Step(name="sast-scan")
