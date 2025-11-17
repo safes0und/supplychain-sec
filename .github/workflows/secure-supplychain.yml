@@ -112,23 +112,23 @@ jobs:
           # Шаг 1: SAST сканирование
           step_sast = Step(name="sast-scan")
           step_sast.expected_products = [["CREATE", "semgrep-results.json"]]
-          step_sast.pubkeys = [functionary_keyid]  
+          step_sast.pubkeys = functionary_keyid  
           
           # Шаг 2: Trivy сканирование
           step_trivy = Step(name="trivy-scan")
           step_trivy.expected_products = [["CREATE", "trivy-fs-report.json"]]
-          step_trivy.pubkeys = [functionary_keyid]
+          step_trivy.pubkeys = functionary_keyid
           
           # Шаг 3: SBOM генерация
           step_sbom = Step(name="sbom-generation")
           step_sbom.expected_products = [["CREATE", "sbom-dependencies.json"]]
-          step_sbom.pubkeys = [functionary_keyid]
+          step_sbom.pubkeys = functionary_keyid
           
           # Шаг 4: Сборка образа
           step_build = Step(name="docker-build")
           step_build.expected_materials = [["MATCH", "Dockerfile", "WITH", "PRODUCTS", "FROM", "sbom-generation"]]
           step_build.expected_products = [["CREATE", "sbom-image.json"]]
-          step_build.pubkeys = [functionary_keyid]
+          step_build.pubkeys = functionary_keyid
           
           layout.steps = [step_sast, step_trivy, step_sbom, step_build]
           
