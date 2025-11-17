@@ -95,10 +95,11 @@ jobs:
           python3 - <<'PYEOF'
           from in_toto.models.layout import Layout, Step
           from in_toto.models.metadata import Metablock
+          from securesystemslib import *
 
-          # Считываем публичный ключ functionary-key.pub в переменную pub_key
-          with open("functionary-key.pub", "r") as key_file:
-            pub_key = key_file.read()
+          # Считываем публичный ключ functionary-key.pub в переменную functionary_keyid
+          functionary_key = import_rsa_publickey_from_file("functionary-key.pub")
+          functionary_keyid = functionary_key["keyid"]
           
           # Создаём layout с определением шагов
           layout = Layout()
@@ -108,23 +109,23 @@ jobs:
           # Шаг 1: SAST сканирование
           step_sast = Step(name="sast-scan")
           step_sast.expected_products = [["CREATE", "semgrep-results.json"]]
-          step_sast.pubkeys = [pub_key]  
+          step_sast.pubkeys = [functionary_keyid]  
           
           # Шаг 2: Trivy сканирование
           step_trivy = Step(name="trivy-scan")
           step_trivy.expected_products = [["CREATE", "trivy-fs-report.json"]]
-          step_trivy.pubkeys = [pub_key]
+          step_trivy.pubkeys = [functionary_keyid]
           
           # Шаг 3: SBOM генерация
           step_sbom = Step(name="sbom-generation")
           step_sbom.expected_products = [["CREATE", "sbom-dependencies.json"]]
-          step_sbom.pubkeys = [pub_key]
+          step_sbom.pubkeys = [functionary_keyid]
           
           # Шаг 4: Сборка образа
           step_build = Step(name="docker-build")
           step_build.expected_materials = [["MATCH", "Dockerfile", "WITH", "PRODUCTS", "FROM", "sbom-generation"]]
           step_build.expected_products = [["CREATE", "sbom-image.json"]]
-          step_build.pubkeys = [pub_key]
+          step_build.pubkeys = [functionary_keyid]
           
           layout.steps = [step_sast, step_trivy, step_sbom, step_build]
           
