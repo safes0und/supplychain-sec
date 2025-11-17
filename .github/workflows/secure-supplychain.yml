@@ -418,7 +418,7 @@ jobs:
               # link_dir содержит все .link файлы от каждого шага
               in_toto_verify(
                   layout="supply-chain.layout",
-                  verification-keys=["functionary-key.pub"],
+                  verification-keys="functionary-key.pub",
                   link_dir="."
               )
               print("✅ in-toto supply chain verification PASSED")
