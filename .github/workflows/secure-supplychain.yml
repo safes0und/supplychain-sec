@@ -135,47 +135,55 @@ jobs:
           print("in-toto layout created: supply-chain.layout")
           PYEOF
 
-      - name: Run SAST (Semgrep) - Python code scanning with in-toto
+      - name: SAST scan - record start
+        run: |
+          in-toto-record start --step-name sast-scan --key functionary-key.pem
+
+      - name: Run SAST (Semgrep) - Python code scanning
         id: semgrep
         run: |
-          # Запускаем Semgrep внутри in-toto-run для генерации link метаданных
-          in-toto-run \
-            --step-name sast-scan \
-            --key functionary-key.pem \
-            --products semgrep-results.json \
-            -- sh -c 'semgrep --config=auto --json --json-output semgrep-results.json . || echo "{\"version\":\"2.1.0\",\"runs\":[]}" > semgrep-results.json'
+          semgrep --config=auto --json --json-output semgrep-results.json . || echo '{"version":"2.1.0","runs":[]}' > semgrep-results.json
         continue-on-error: true
 
-      - name: Run Trivy filesystem scanner (vuln, config, secrets) with in-toto
+      - name: SAST scan - record stop
+        run: |
+          in-toto-record stop --step-name sast-scan --key functionary-key.pem --products semgrep-results.json
+
+      - name: Trivy scan - record start
+        run: |
+          in-toto-record start --step-name trivy-scan --key functionary-key.pem
+
+      - name: Run Trivy filesystem scanner (vuln, config, secrets)
         id: trivy-fs
         run: |
-          # Запускаем Trivy внутри in-toto-run
-          in-toto-run \
-            --step-name trivy-scan \
-            --key functionary-key.pem \
-            --products trivy-fs-report.json \
-            -- trivy fs . \
-              --format cyclonedx \
-              --output trivy-fs-report.json \
-              --scanners vuln,misconfig,secret \
-              --exit-code 0
+          trivy fs . \
+            --format cyclonedx \
+            --output trivy-fs-report.json \
+            --scanners vuln,misconfig,secret \
+            --exit-code 0
+
+      - name: Trivy scan - record stop
+        run: |
+          in-toto-record stop --step-name trivy-scan --key functionary-key.pem --products trivy-fs-report.json
 
       # ============================================
       # SBOM Generation (Для зависимостей)
       # ============================================
-      - name: Generate pre-build SBOM (dependencies) with in-toto
+      - name: SBOM generation - record start
+        run: |
+          in-toto-record start --step-name sbom-generation --key functionary-key.pem --materials Dockerfile requirements.txt
+
+      - name: Generate pre-build SBOM (dependencies)
         id: sbom-deps
         run: |
-          # Генерируем SBOM внутри in-toto-run
-          in-toto-run \
-            --step-name sbom-generation \
-            --key functionary-key.pem \
-            --materials Dockerfile requirements.txt \
-            --products sbom-dependencies.json \
-            -- trivy fs . \
-              --format cyclonedx \
-              --output sbom-dependencies.json \
-              --exit-code 0
+          trivy fs . \
+            --format cyclonedx \
+            --output sbom-dependencies.json \
+            --exit-code 0
+
+      - name: SBOM generation - record stop
+        run: |
+          in-toto-record stop --step-name sbom-generation --key functionary-key.pem --products sbom-dependencies.json
 
       # ============================================
       # Build Docker Image
@@ -214,19 +222,21 @@ jobs:
       # ============================================
       # Generate Final SBOM (Для образа)
       # ============================================
-      - name: Generate final SBOM for image with in-toto
+      - name: Docker build - record start
+        run: |
+          in-toto-record start --step-name docker-build --key functionary-key.pem --materials Dockerfile
+
+      - name: Generate final SBOM for image
         id: sbom-image
         run: |
-          # Генерируем финальный SBOM для образа внутри in-toto-run
-          in-toto-run \
-            --step-name docker-build \
-            --key functionary-key.pem \
-            --materials Dockerfile \
-            --products sbom-image.json \
-            -- trivy image ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.TAG_NAME }} \
-              --format cyclonedx \
-              --output sbom-image.json \
-              --exit-code 0
+          trivy image ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.TAG_NAME }} \
+            --format cyclonedx \
+            --output sbom-image.json \
+            --exit-code 0
+
+      - name: Docker build - record stop
+        run: |
+          in-toto-record stop --step-name docker-build --key functionary-key.pem --products sbom-image.json
 
       # ============================================
       # Collect in-toto Link Metadata
