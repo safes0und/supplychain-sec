@@ -137,7 +137,7 @@ jobs:
 
       - name: SAST scan - record start
         run: |
-          in-toto-record start --step-name sast-scan --key functionary-key.pem
+          in-toto-record start --step-name sast-scan -k functionary-key.pem
 
       - name: Run SAST (Semgrep) - Python code scanning
         id: semgrep
@@ -147,11 +147,11 @@ jobs:
 
       - name: SAST scan - record stop
         run: |
-          in-toto-record stop --step-name sast-scan --key functionary-key.pem --products semgrep-results.json
+          in-toto-record stop --step-name sast-scan -k functionary-key.pem --products semgrep-results.json
 
       - name: Trivy scan - record start
         run: |
-          in-toto-record start --step-name trivy-scan --key functionary-key.pem
+          in-toto-record start --step-name trivy-scan -k functionary-key.pem
 
       - name: Run Trivy filesystem scanner (vuln, config, secrets)
         id: trivy-fs
@@ -164,14 +164,14 @@ jobs:
 
       - name: Trivy scan - record stop
         run: |
-          in-toto-record stop --step-name trivy-scan --key functionary-key.pem --products trivy-fs-report.json
+          in-toto-record stop --step-name trivy-scan -k functionary-key.pem --products trivy-fs-report.json
 
       # ============================================
       # SBOM Generation (Для зависимостей)
       # ============================================
       - name: SBOM generation - record start
         run: |
-          in-toto-record start --step-name sbom-generation --key functionary-key.pem --materials Dockerfile requirements.txt
+          in-toto-record start --step-name sbom-generation -k functionary-key.pem --materials Dockerfile requirements.txt
 
       - name: Generate pre-build SBOM (dependencies)
         id: sbom-deps
@@ -183,7 +183,7 @@ jobs:
 
       - name: SBOM generation - record stop
         run: |
-          in-toto-record stop --step-name sbom-generation --key functionary-key.pem --products sbom-dependencies.json
+          in-toto-record stop --step-name sbom-generation -k functionary-key.pem --products sbom-dependencies.json
 
       # ============================================
       # Build Docker Image
@@ -224,7 +224,7 @@ jobs:
       # ============================================
       - name: Docker build - record start
         run: |
-          in-toto-record start --step-name docker-build --key functionary-key.pem --materials Dockerfile
+          in-toto-record start --step-name docker-build -k functionary-key.pem --materials Dockerfile
 
       - name: Generate final SBOM for image
         id: sbom-image
@@ -236,7 +236,7 @@ jobs:
 
       - name: Docker build - record stop
         run: |
-          in-toto-record stop --step-name docker-build --key functionary-key.pem --products sbom-image.json
+          in-toto-record stop --step-name docker-build -k functionary-key.pem --products sbom-image.json
 
       # ============================================
       # Collect in-toto Link Metadata
