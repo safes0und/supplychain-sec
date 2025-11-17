@@ -369,10 +369,12 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Install Cosign
+      - name: Install security tools
         run: |
           curl -sSfL https://github.com/sigstore/cosign/releases/latest/download/cosign-linux-amd64 | sudo tee /usr/local/bin/cosign > /dev/null
           sudo chmod +x /usr/local/bin/cosign
+          
+          pip install in-toto
 
       - name: Log in to GHCR (Cosign publishing)
         uses: docker/login-action@v3
@@ -380,6 +382,7 @@ jobs:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+          
 
       - name: Download SLSA provenance artifact
         uses: actions/download-artifact@v4
