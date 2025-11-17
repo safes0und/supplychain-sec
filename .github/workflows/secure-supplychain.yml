@@ -134,6 +134,11 @@ jobs:
           
           print("in-toto layout created: supply-chain.layout")
           PYEOF
+      
+      - name: Sign in-toto layout
+        run: |
+          # Подписываем layout тем же ключом, чтобы in-toto-verify мог его проверить
+          in-toto-sign --key functionary-key.pem --metadata supply-chain.layout --output supply-chain.layout
 
       - name: SAST scan - record start
         run: |
@@ -408,26 +413,6 @@ jobs:
           cd in-toto-metadata
           in-toto-verify --layout supply-chain.layout --verification-keys functionary-key.pub \
             --link-dir .
-          
-          # # Проверяем layout и link metadata
-          # python3 - <<'PYEOF'
-          # from in_toto.verifylib import in_toto_verify
-          # import sys
-          
-          # try:
-          #     # Верифицируем supply chain
-          #     # layout_path - путь к layout файлу
-          #     # layout_key_paths - список публичных ключей для верификации layout
-          #     # link_dir - директория с .link файлами от каждого шага
-          #     in_toto_verify(
-          #         "supply-chain.layout",
-          #         {"functionary": "functionary-key.pub"}
-          #     )
-          #     print("✅ in-toto supply chain verification PASSED")
-          # except Exception as e:
-          #     print(f"❌ in-toto supply chain verification FAILED: {e}")
-          #     sys.exit(1)
-          # PYEOF
 
       - name: Sign container image (Cosign OIDC)
         run: |
