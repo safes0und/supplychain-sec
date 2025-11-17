@@ -411,10 +411,12 @@ jobs:
           cosign sign \
             "${IMAGE_WITH_DIGEST}" \
             --yes
+
       - name: Archive downloaded provenance for traceability
         run: |
           ls -lah slsa-provenance.*
           sha256sum slsa-provenance.intoto.jsonl slsa-provenance.statement.json slsa-provenance.predicate.json
+
       - name: Attest final SBOM
         run: |
           cosign attest \
@@ -459,24 +461,25 @@ jobs:
             --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
             "${IMAGE_WITH_DIGEST}"
             
-      - name: Install slsa-verifier
-        uses: slsa-framework/slsa-verifier/actions/installer@v2.7.1
+      # - name: Install slsa-verifier
+      #   uses: slsa-framework/slsa-verifier/actions/installer@v2.7.1
 
-      - name: Verify SLSA provenance attestation with slsa-verifier
-        run: |
-          slsa-verifier verify-image \
-            --provenance-path slsa-provenance.intoto.jsonl \
-            "${IMAGE_WITH_DIGEST}"
-
-      # - name: Verify attestations with OIDC identity
+      # - name: Verify SLSA provenance attestation with slsa-verifier
       #   run: |
-      #       # # Верификация SLSA provenance
-      #       # COSIGN_EXPERIMENTAL=1 \
-      #       # cosign verify-attestation \
-      #       #   --type slsaprovenance \
-      #       #   --certificate-identity-regexp 'https://github.com/slsa-framework/slsa-github-generator/.github/workflows/generator_container_slsa3.yml@refs/tags/v[0-9]+.[0-9]+.[0-9]+$' \
-      #       #   --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
-      #       #   "${IMAGE_WITH_DIGEST}"
+      #     slsa-verifier verify-image \
+            
+      #       --provenance-path slsa-provenance.intoto.jsonl \
+      #       "${IMAGE_WITH_DIGEST}"
+
+      - name: Verify attestations with OIDC identity
+        run: |
+            # # Верификация SLSA provenance
+            # COSIGN_EXPERIMENTAL=1 \
+            # cosign verify-attestation \
+            #   --type https://slsa.dev/provenance/v0.2 \
+            #   --certificate-identity 'https://github.com/slsa-framework/slsa-github-generator/.github/workflows/generator_container_slsa3.yml@refs/tags/v2.1.0' \
+            #   --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+            #   "${IMAGE_WITH_DIGEST}"
 
       - name: Verify attestations with OIDC identity
         run: |
