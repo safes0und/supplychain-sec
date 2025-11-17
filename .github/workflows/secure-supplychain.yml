@@ -461,7 +461,7 @@ jobs:
           COSIGN_EXPERIMENTAL=1 \
           cosign verify-attestation \
             --type slsaprovenance \
-            --certificate-identity "https://github.com/slsa-framework/slsa-github-generator/.github/workflows/generator_container_slsa3.yml@refs/tags/v2.1.0" \
+            --certificate-identity "https://github.com/${{ github.repository }}/.github/workflows/secure-supplychain.yml@refs/heads/main" \
             --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
             "${IMAGE_WITH_DIGEST}"
           
@@ -469,21 +469,21 @@ jobs:
           COSIGN_EXPERIMENTAL=1 \
           cosign verify-attestation \
             --type https://cyclonedx.org/bom \
-            --certificate-identity "https://github.com/slsa-framework/slsa-github-generator/.github/workflows/generator_container_slsa3.yml@refs/tags/v2.1.0" \
+            --certificate-identity "https://github.com/${{ github.repository }}/.github/workflows/secure-supplychain.yml@refs/heads/main" \
             --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
             "${IMAGE_WITH_DIGEST}"
           # Верификация Semgrep attestation
           COSIGN_EXPERIMENTAL=1 \
           cosign verify-attestation \
             --type https://semgrep.dev/scan-result/v0.1 \
-            --certificate-identity "https://github.com/slsa-framework/slsa-github-generator/.github/workflows/generator_container_slsa3.yml@refs/tags/v2.1.0" \
+            --certificate-identity "https://github.com/${{ github.repository }}/.github/workflows/secure-supplychain.yml@refs/heads/main" \
             --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
             "${IMAGE_WITH_DIGEST}"
           # Верификация Trivy attestation
           COSIGN_EXPERIMENTAL=1 \
           cosign verify-attestation \
             --type https://aquasecurity.github.io/trivy/vulnerability-scan/v0.1 \
-            --certificate-identity "https://github.com/slsa-framework/slsa-github-generator/.github/workflows/generator_container_slsa3.yml@refs/tags/v2.1.0" \
+            --certificate-identity "https://github.com/${{ github.repository }}/.github/workflows/secure-supplychain.yml@refs/heads/main" \
             --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
             "${IMAGE_WITH_DIGEST}"
       - name: Create security summary
