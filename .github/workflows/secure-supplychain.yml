@@ -56,52 +56,34 @@ jobs:
       # ============================================
       - name: Generate in-toto functionary key
         run: |
-          # Генерируем ключ для подписи link метаданных
+          # Генерируем совместимый с in-toto ключ (securesystemslib JSON)
           python3 - <<'PYEOF'
-          import os
-          from cryptography.hazmat.primitives.asymmetric import rsa
-          from cryptography.hazmat.primitives import serialization
-          from cryptography.hazmat.backends import default_backend
+          from securesystemslib.interface import generate_and_write_rsa_keypair
           
-          # Генерируем RSA keypair
-          private_key = rsa.generate_private_key(
-              public_exponent=65537,
-              key_size=4096,
-              backend=default_backend()
+          generate_and_write_rsa_keypair(
+              password=None,
+              filepath="functionary-key",
+              bits=4096
           )
-          
-          # Сохраняем приватный ключ
-          with open("functionary-key.pem", "wb") as f:
-              f.write(private_key.private_bytes(
-                  encoding=serialization.Encoding.PEM,
-                  format=serialization.PrivateFormat.PKCS8,
-                  encryption_algorithm=serialization.NoEncryption()
-              ))
-          
-          # Сохраняем публичный ключ
-          public_key = private_key.public_key()
-          with open("functionary-key.pub", "wb") as f:
-              f.write(public_key.public_bytes(
-                  encoding=serialization.Encoding.PEM,
-                  format=serialization.PublicFormat.SubjectPublicKeyInfo
-              ))
+          print("Functionary key generated")
           PYEOF
           
-          chmod 600 functionary-key.pem
-          echo "Functionary key generated"
+          chmod 600 functionary-key
+          ls -lah functionary-key*
 
       - name: Create in-toto layout
         run: |
           # Создаём layout для supply chain
           python3 - <<'PYEOF'
+          import json
           from in_toto.models.layout import Layout, Step
           from in_toto.models.metadata import Metablock
-          from in_toto.util import import_rsa_key_from_file
           
-          # Загружаем публичный ключ исполнителя, чтобы авторизовать его для шагов
-          functionary_key = import_rsa_key_from_file("functionary-key.pub")
+          # Загружаем публичный ключ исполнителя (securesystemslib JSON)
+          with open("functionary-key.pub") as f:
+              functionary_key = json.load(f)
           functionary_key_id = functionary_key["keyid"]
-
+          
           # Создаём layout с определением шагов
           layout = Layout()
           layout._type = "layout"
@@ -144,11 +126,11 @@ jobs:
       - name: Sign in-toto layout
         run: |
           # Подписываем layout тем же ключом, чтобы in-toto-verify мог его проверить
-          in-toto-sign --key functionary-key.pem --f supply-chain.layout --output supply-chain.layout
+          in-toto-sign --key functionary-key --f supply-chain.layout --output supply-chain.layout
 
       - name: SAST scan - record start
         run: |
-          in-toto-record start --step-name sast-scan --signing-key functionary-key.pem
+          in-toto-record start --step-name sast-scan --signing-key functionary-key
 
       - name: Run SAST (Semgrep) - Python code scanning
         id: semgrep
@@ -158,11 +140,11 @@ jobs:
 
       - name: SAST scan - record stop
         run: |
-          in-toto-record stop --step-name sast-scan --signing-key functionary-key.pem --products semgrep-results.json
+          in-toto-record stop --step-name sast-scan --signing-key functionary-key --products semgrep-results.json
 
       - name: Trivy scan - record start
         run: |
-          in-toto-record start --step-name trivy-scan --signing-key functionary-key.pem
+          in-toto-record start --step-name trivy-scan --signing-key functionary-key
 
       - name: Run Trivy filesystem scanner (vuln, config, secrets)
         id: trivy-fs
@@ -175,14 +157,14 @@ jobs:
 
       - name: Trivy scan - record stop
         run: |
-          in-toto-record stop --step-name trivy-scan --signing-key functionary-key.pem --products trivy-fs-report.json
+          in-toto-record stop --step-name trivy-scan --signing-key functionary-key --products trivy-fs-report.json
 
       # ============================================
       # SBOM Generation (Для зависимостей)
       # ============================================
       - name: SBOM generation - record start
         run: |
-          in-toto-record start --step-name sbom-generation --signing-key functionary-key.pem --materials Dockerfile requirements.txt
+          in-toto-record start --step-name sbom-generation --signing-key functionary-key --materials Dockerfile requirements.txt
 
       - name: Generate pre-build SBOM (dependencies)
         id: sbom-deps
@@ -194,7 +176,7 @@ jobs:
 
       - name: SBOM generation - record stop
         run: |
-          in-toto-record stop --step-name sbom-generation --signing-key functionary-key.pem --products sbom-dependencies.json
+          in-toto-record stop --step-name sbom-generation --signing-key functionary-key --products sbom-dependencies.json
 
       # ============================================
       # Build Docker Image
@@ -235,7 +217,7 @@ jobs:
       # ============================================
       - name: Docker build - record start
         run: |
-          in-toto-record start --step-name docker-build --signing-key functionary-key.pem --materials Dockerfile
+          in-toto-record start --step-name docker-build --signing-key functionary-key --materials Dockerfile
 
       - name: Generate final SBOM for image
         id: sbom-image
@@ -247,7 +229,7 @@ jobs:
 
       - name: Docker build - record stop
         run: |
-          in-toto-record stop --step-name docker-build --signing-key functionary-key.pem --products sbom-image.json
+          in-toto-record stop --step-name docker-build --signing-key functionary-key --products sbom-image.json
 
       # ============================================
       # Collect in-toto Link Metadata
