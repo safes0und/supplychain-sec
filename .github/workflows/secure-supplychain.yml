@@ -95,11 +95,13 @@ jobs:
           python3 - <<'PYEOF'
           from in_toto.models.layout import Layout, Step
           from in_toto.models.metadata import Metablock
-          from securesystemslib.interface import import_rsa_publickey_from_file
 
-          # Считываем публичный ключ functionary-key.pub в переменную functionary_keyid
-          functionary_key = import_rsa_publickey_from_file("functionary-key.pub")
-          functionary_keyid = functionary_key["keyid"]
+          # # Считываем публичный ключ functionary-key.pub в переменную functionary_keyid
+          # functionary_key = import_rsa_publickey_from_file("functionary-key.pub")
+          # functionary_keyid = functionary_key["keyid"]
+
+          functionary_keys = layout.add_functionary_keys_from_paths(["functionary-key.pub"])
+          functionary_keyid = list(functionary_keys.keys())
           
           # Создаём layout с определением шагов
           layout = Layout()
