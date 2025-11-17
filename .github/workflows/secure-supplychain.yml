@@ -138,7 +138,7 @@ jobs:
       - name: Sign in-toto layout
         run: |
           # Подписываем layout тем же ключом, чтобы in-toto-verify мог его проверить
-          in-toto-sign --key functionary-key.pem --metadata supply-chain.layout --output supply-chain.layout
+          in-toto-sign --key functionary-key.pem --f supply-chain.layout --output supply-chain.layout
 
       - name: SAST scan - record start
         run: |
