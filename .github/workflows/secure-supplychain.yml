@@ -466,7 +466,7 @@ jobs:
         run: |
           slsa-verifier verify-image \
             --source-uri "git+https://github.com/${{ github.repository }}" \
-            --source-tag "${{ github.ref_name }}" \
+            --source-commit "${{ github.sha }}" \
             --provenance-path slsa-provenance.intoto.jsonl \
             "${IMAGE_WITH_DIGEST}"
 
