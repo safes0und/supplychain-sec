@@ -15,7 +15,7 @@ RUN pip install --no-cache-dir --require-hashes -r requirements.txt \
 COPY . /app
 
 # Открываем порт 8080
-EXPOSE 8080
+EXPOSE 7777
 
 # Команда запуска
-CMD ["gunicorn", "-b", "0.0.0.0:8080", "app:app"]
+CMD ["gunicorn", "-b", "0.0.0.0:7777", "app:app"]
