@@ -414,7 +414,6 @@ jobs:
           sha256sum slsa-provenance.intoto.jsonl slsa-provenance.statement.json slsa-provenance.predicate.json
       - name: Attest final SBOM
         run: |
-          COSIGN_EXPERIMENTAL=1 \  
           cosign attest \
             --type https://cyclonedx.org/bom \
             --predicate sbom-image.json \
@@ -423,7 +422,6 @@ jobs:
       - name: Attest dependency SBOM
         run: |
           if [ -f sbom-dependencies.json ]; then
-            COSIGN_EXPERIMENTAL=1 \
             cosign attest \
               --type https://cyclonedx.org/bom \
               --predicate sbom-dependencies.json \
@@ -433,7 +431,6 @@ jobs:
       - name: Attest SAST scan results (Semgrep)
         run: |
           if [ -f semgrep-results.json ]; then
-            COSIGN_EXPERIMENTAL=1 \
             cosign attest \
               --type https://semgrep.dev/scan-result/v0.1 \
               --predicate semgrep-results.json \
@@ -442,7 +439,6 @@ jobs:
           fi
       - name: Attest Trivy scan results
         run: |
-          COSIGN_EXPERIMENTAL=1 \
           cosign attest \
             --type https://aquasecurity.github.io/trivy/vulnerability-scan/v0.1 \
             --predicate trivy-fs-report.json \
