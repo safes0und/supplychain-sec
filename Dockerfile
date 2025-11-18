@@ -1,5 +1,6 @@
 # Базовый образ с Python
 FROM python:3.12-slim
+LABEL org.opencontainers.image.description="python demo app"
 
 # Рабочая директория внутри контейнера
 WORKDIR /app
