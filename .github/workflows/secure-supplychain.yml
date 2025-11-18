@@ -438,7 +438,6 @@ jobs:
         run: |
           COSIGN_EXPERIMENTAL=1 \
           cosign sign \
-            --type "https://github.com/${{ github.repository }}/.github/workflows/secure-supplychain.yml@refs/heads/main" \
             "${IMAGE_WITH_DIGEST}" \
             --yes
 
@@ -497,7 +496,6 @@ jobs:
         run: |
           COSIGN_EXPERIMENTAL=1 \
           cosign verify \
-            --type "https://github.com/${{ github.repository }}/.github/workflows/secure-supplychain.yml@refs/heads/main"
             --certificate-identity "https://github.com/${{ github.repository }}/.github/workflows/secure-supplychain.yml@refs/heads/main" \
             --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
             "${IMAGE_WITH_DIGEST}"
@@ -539,8 +537,8 @@ jobs:
             --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
             "${IMAGE_WITH_DIGEST}"
 
-
-      - name: Create security summary
+      # вывод саммари по пайплайну
+      - name: Create summary
         run: |
           echo "## 🔒 Security Supply Chain Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
@@ -578,3 +576,40 @@ jobs:
           echo "- **security-artifacts**: Scan results and SBOMs" >> $GITHUB_STEP_SUMMARY
           echo "- **slsa-provenance**: SLSA statement, predicate, and in-toto JSONL" >> $GITHUB_STEP_SUMMARY
           echo "- **in-toto-metadata**: Layout, link files, and public key" >> $GITHUB_STEP_SUMMARY
+
+  # деплой в докер 
+  deploy-to-self-hosted:
+    needs: [sign-and-attest, build-and-attest]
+    runs-on: [self-hosted, linux]
+    permissions:
+      contents: read
+      packages: read
+    env:
+      IMAGE: ${{ needs.build-and-attest.outputs.image }}
+      TAG: ${{ needs.build-and-attest.outputs.tag }}
+      CONTAINER_NAME: supplychain-sec
+    steps:
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+          
+      - name: Pull image
+        run: |
+          echo "${env.REGISTRY} ${IMAGE}:${TAG} - ${CONTAINER_NAME}"
+          docker pull "${IMAGE}:${TAG}"
+
+      - name: Stop existing container
+        run: |
+          docker rm -f "${CONTAINER_NAME}" || true
+
+      - name: Run updated container
+        run: |
+          docker run -d \
+            --name "${CONTAINER_NAME}" \
+            --restart unless-stopped \
+            -p 7777:7777 \
+            "${IMAGE}:${TAG}"
