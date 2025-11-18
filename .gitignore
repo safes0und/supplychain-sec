@@ -1,3 +1,1 @@
-# GitHub Actions workflows
-.github/workflows/secure-pipeline.yml
-
+requirements.lock 
