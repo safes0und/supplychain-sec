@@ -26,7 +26,7 @@
 ```
 SupplyChain-Sec/
 ├── app.py                   # Основное Flask приложение
-├── Dockerfile      з
+├── Dockerfile      
 ├── requirements.txt         # Зависимости Python (с хешами)
 └── .github/
     └── workflows/
@@ -78,6 +78,3 @@ Pipeline генерирует следующие артефакты:
 - `security-artifacts` - результаты сканирований и SBOM
 - `slsa-provenance` - SLSA метаданные
 - `in-toto-metadata` - layout, link файлы и публичные ключи
-
-Pipeline генерирует следующие артефакты:
-
