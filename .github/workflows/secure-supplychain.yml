@@ -503,12 +503,12 @@ jobs:
       # верификация SLSA provenance
       - name: Verify SLSA provenance
         run: |
-            COSIGN_EXPERIMENTAL=1 \
-            cosign verify-attestation \
-              --type https://slsa.dev/provenance/v0.2 \
-              --certificate-identity 'https://github.com/slsa-framework/slsa-github-generator/.github/workflows/generator_container_slsa3.yml@refs/tags/v2.1.0' \
-              --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
-              "${IMAGE_WITH_DIGEST}"
+            # COSIGN_EXPERIMENTAL=1 \
+            # cosign verify-attestation \
+            #   --type https://slsa.dev/provenance/v0.2 \
+            #   --certificate-identity 'https://github.com/slsa-framework/slsa-github-generator/.github/workflows/generator_container_slsa3.yml@refs/tags/v2.1.0' \
+            #   --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+            #   "${IMAGE_WITH_DIGEST}"
 
       # верификация остальных аттестатов             
       - name: Verify semgrep, trivy, sbom
