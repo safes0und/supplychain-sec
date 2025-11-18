@@ -599,7 +599,6 @@ jobs:
           
       - name: Pull image
         run: |
-          echo "${env.REGISTRY} ${IMAGE}:${TAG} - ${CONTAINER_NAME}"
           docker pull "${IMAGE}:${TAG}"
 
       - name: Stop existing container
