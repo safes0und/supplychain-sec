@@ -1,0 +1,99 @@
+{
+ "signatures": [
+  {
+   "keyid": "0222a0954d2e9639e8fadd499d2eca18340e6a7d41cb25df51bd48fffb81c7b7",
+   "sig": "00e4e7cf8f037c47a03730bc85bd3d7afb4ad9521380011de36e38f3a80548412dac5fe6fe3ea0805adb00a94321b56a99efcd29603f0dd073f3e311a9c8e0e1a37672cdc766492b3acc4cca03a7f99d4c39f16a7c69c9e31d3e1cf0aa89c3b5081b90d1a0a14730a7e22c99e68fccb8441968a9db435b0fcb0e42c4cc0ddf1e85fbd674db8414b6877941ab5457faa112b77f9685ab5e3cb494d4c16ba66fe7aa189e6d185130a03e88eeb51c5bd90c9f323e5fe15592a10240c02dbd1f235fdfcdcbeb185fb2ccd6e2db135ab2a7fb8baf4dcf4a99ab649d1d4a9fe46259e22cd3b3d0d6d1a6c94117dc72ff09003882d9c4530d0f8684d00cd35b4a4fb3a803f5e74ee76981c7ed55fb33c86265dc6f5826f8996b53726f5ea7e60d7ca4ee289256014c3aa84b083c0058a8ceea776f2d00b2a72289e94ad8e554ae5af1b2f006ad8e69693cc879022bcc8175ab1c39934d05821c63494b4abaabb9f35bce09db29658f23444658989af0d062278c631f3de3f3a5ccb29df9bd268f91c8d43545350b1f32f06a02e41443acfc80830c9cb92aabbaa91d19834f3aeddb45b3ae1633bc35f54274e1374d035a7f7069f0544f4de1719f6941d4e9c17481faa47889ce1966ca155b3fcea9d51060c79e40e8cfcfb5e95483647c43603238ef0e517686e18600b181f7b8f4e0b3a74e45fdb986156f4f6e1bffe19a43b1cb8921"
+  }
+ ],
+ "signed": {
+  "_type": "layout",
+  "expires": "2030-12-31T23:59:59Z",
+  "inspect": [],
+  "keys": {
+   "0222a0954d2e9639e8fadd499d2eca18340e6a7d41cb25df51bd48fffb81c7b7": {
+    "keyid": "0222a0954d2e9639e8fadd499d2eca18340e6a7d41cb25df51bd48fffb81c7b7",
+    "keytype": "rsa",
+    "keyval": {
+     "public": "-----BEGIN PUBLIC KEY-----\nMIICIjANBgkqhkiG9w0BAQEFAAOCAg8AMIICCgKCAgEAuvoiMJYFd664QeI80fhY\n2AJO5SQA4v41XhQk/KVZ7YWd3AluThx2YC6JUeZL3fCzN9LWjjihlGnizh/oGTK/\nH6FCslSMRRyMLzeFHgLhZpJq3pcWBMISynKqfKHD+Ze+RICKwSGhiiEWJI+kORcp\nYH2lZjhtXb/oaPiAObzoryxwE985B91C1ExdFyPcbfmrwN2hiA/EIXGN8FXTG83R\nG5pl/v6XlXkrGb0u20kn71Ku0B9Ry3PIeHIPvwuiDCVFsz3JqH3j3n8hcb4NM9uY\nNhFqdn0x8yLQjACC3h8uUC21h+sCURWFlk/e8KMFFHGWHrVenI/i2cQs7fCTwyAB\nK8JJQafP63co0NPezBdqOghL6fkcPde+J6lgBjmurjVDlcSLHinKuzfBrgEcye5v\nORb8/VD5t2JJZfAURjcRa4ncaeQ6m7NU4I7Hqv+kLCmBY8MLGZQl7QP/E8hh2kwV\nipwW3XjAj0MYi46TF8v+EZCb4EbkUlwX38UnjNnWJZkQRGq+jIwMDhkWD15OwNAM\niD5v9NiqV18X8pJEbAyGDrNIbecBaJv1maDX4bxHQ8Y94LFqXnqKchvyi6ELDrw4\nWQmLfaeNCCxBm6PlVOkVEVYrQmo6ivQyqk8D2QpCMrlD21P0rH40rFfqQUtbfJbB\np8Kxfj+naYQIhxY90dD87m8CAwEAAQ==\n-----END PUBLIC KEY-----\n"
+    },
+    "scheme": "rsassa-pss-sha256"
+   }
+  },
+  "readme": "",
+  "steps": [
+   {
+    "_type": "step",
+    "expected_command": [],
+    "expected_materials": [],
+    "expected_products": [
+     [
+      "CREATE",
+      "semgrep-results.json"
+     ]
+    ],
+    "name": "sast-scan",
+    "pubkeys": [
+     "0222a0954d2e9639e8fadd499d2eca18340e6a7d41cb25df51bd48fffb81c7b7"
+    ],
+    "threshold": 1
+   },
+   {
+    "_type": "step",
+    "expected_command": [],
+    "expected_materials": [],
+    "expected_products": [
+     [
+      "CREATE",
+      "trivy-fs-report.json"
+     ]
+    ],
+    "name": "trivy-scan",
+    "pubkeys": [
+     "0222a0954d2e9639e8fadd499d2eca18340e6a7d41cb25df51bd48fffb81c7b7"
+    ],
+    "threshold": 1
+   },
+   {
+    "_type": "step",
+    "expected_command": [],
+    "expected_materials": [],
+    "expected_products": [
+     [
+      "CREATE",
+      "sbom-dependencies.json"
+     ]
+    ],
+    "name": "sbom-generation",
+    "pubkeys": [
+     "0222a0954d2e9639e8fadd499d2eca18340e6a7d41cb25df51bd48fffb81c7b7"
+    ],
+    "threshold": 1
+   },
+   {
+    "_type": "step",
+    "expected_command": [],
+    "expected_materials": [
+     [
+      "MATCH",
+      "Dockerfile",
+      "WITH",
+      "PRODUCTS",
+      "FROM",
+      "sbom-generation"
+     ]
+    ],
+    "expected_products": [
+     [
+      "CREATE",
+      "sbom-image.json"
+     ]
+    ],
+    "name": "docker-sbom",
+    "pubkeys": [
+     "0222a0954d2e9639e8fadd499d2eca18340e6a7d41cb25df51bd48fffb81c7b7"
+    ],
+    "threshold": 1
+   }
+  ]
+ }
+}
