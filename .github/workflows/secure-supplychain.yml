@@ -219,20 +219,20 @@ jobs:
         run: |
           in-toto-record stop --step-name docker-sbom --signing-key functionary-key.pem --products sbom-image.json
           echo "- ✅ Image SBOM generated (CycloneDX)" >> $GITHUB_STEP_SUMMARY
-
-      # собираем все .link файлы, сгенерированные in-toto-run
-      - name: Collect in-toto link files
-        run: |
-          mkdir -p in-toto-metadata
-          mv *.link in-toto-metadata/ || true
-          cp supply-chain.layout in-toto-metadata/
-          cp functionary-key.pub in-toto-metadata/
-          
-          # Показываем что собрали
-          ls -lah in-toto-metadata/
-          
-          echo "in-toto link metadata collected"
-          
+      # загрузка результатов in-toto в artifacts
+      - name: Upload in-toto metadata
+        uses: actions/upload-artifact@v4
+        with:
+          name: in-toto-metadata
+          path: |
+            *.link
+            supply-chain.layout
+            functionary-key.pub
+          retention-days: 90
+      
+      - name: In-toto metadata summary
+        run: echo "- ✅ in-toto link files collected" >> $GITHUB_STEP_SUMMARY
+  
       # загрузка результатов сканов и SBOM в artifacts
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -245,17 +245,9 @@ jobs:
             sbom-image.json
           retention-days: 90
 
-      # загрузка результатов in-toto в artifacts
-      - name: Upload in-toto metadata
-        uses: actions/upload-artifact@v4
-        with:
-          name: in-toto-metadata
-          path: in-toto-metadata/
-          retention-days: 90
-
-      - name: Collect in-toto metadata summary
+      - name: Collect Security-artifacts summary
         run: |
-          echo "- ✅ in-toto link files collected" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Security-artifacts collected" >> $GITHUB_STEP_SUMMARY
 
   # отдельный job для генерации SLSA provenance
   generate-slsa-provenance:
