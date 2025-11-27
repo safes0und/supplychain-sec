@@ -1,0 +1,537 @@
+name: Build & Attest
+
+on:
+  workflow_dispatch:
+
+# on:
+#   push:
+#     branches: [ main ]
+#     paths:
+#       - 'Dockerfile'
+#       - 'app.py'
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}  # safes0und/supplychain-sec
+  TAG_NAME: ${{ github.run_number }}-sha-${{ github.sha }} 
+
+permissions:
+  id-token: write   # для OIDC cosign
+  contents: read    # actions/checkout@v4
+  packages: write   # публикация пакетов в GHCR
+  security-events: write  # загрузки SARIF результатов
+  actions: read     # загрузки SARIF результатов 
+
+jobs:
+  build-and-attest:
+    runs-on: ubuntu-latest
+    # ожидаемые выводы job'а и переменные окружения
+    outputs:
+      image: ${{ steps.image.outputs.image }}
+      digest: ${{ steps.image.outputs.digest }}
+      tag: ${{ env.TAG_NAME }}
+      registry: ${{ env.REGISTRY }}
+      image-name: ${{ env.IMAGE_NAME }}
+    
+    steps:
+      # скан репозитория 
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Summary - Pipeline started
+        run: |
+          echo "## 🔒 Security Supply Chain Pipeline" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+      # установка Trivy, semgrep, in-toto
+      - name: Install Trivy
+        run: |
+          curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin
+
+      - name: Install semgrep and in-toto (python)
+        run: |
+          pip install semgrep in-toto
+
+      # восстановление приватного ключа из секрета
+      - name: Restore in-toto private key
+        run: |
+          echo "${{ secrets.INTOTO_PRIVATE_KEY }}" > functionary-key.pem
+          chmod 600 functionary-key.pem
+          echo "- ✅ in-toto private key restored from secrets" >> $GITHUB_STEP_SUMMARY
+
+      # SAST для python в формате sarif для GitHub Security (без in-toto)
+      - name: Run Semgrep SAST in sarif
+        id: semgrep_sarif
+        run: |
+          semgrep --config=auto --sarif --output semgrep-results.sarif . || echo '{"version":"2.1.0","$schema":"https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json","runs":[]}' > semgrep-results.sarif
+        continue-on-error: true
+
+      # загрузка semgrep-results в GitHub Security
+      - name: Upload SARIF results to GitHub Security
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: semgrep-results.sarif
+
+
+
+      # начало записи in-toto step'а sast-scan
+      - name: SAST scan - record start
+        run: |
+          in-toto-record start --step-name sast-scan --signing-key functionary-key.pem
+          
+      # SAST для python в формате json (с in-toto)
+      - name: Run Semgrep SAST in json 
+        id: semgrep
+        run: |
+          semgrep --config=auto --json --json-output semgrep-results.json . || echo '{"version":"2.1.0","runs":[]}' > semgrep-results.json
+        continue-on-error: true
+
+      # конец записи in-toto step'а sast-scan    
+      - name: SAST scan - record stop
+        run: |
+          in-toto-record stop --step-name sast-scan --signing-key functionary-key.pem --products semgrep-results.json
+          echo "- ✅ SAST scan (Semgrep) completed" >> $GITHUB_STEP_SUMMARY
+
+      # начало записи in-toto step'а trivy-scan
+      - name: Trivy scan - record start
+        run: |
+          in-toto-record start --step-name trivy-scan --signing-key functionary-key.pem
+
+      # скан зависимостей Trivy fs
+      - name: Trivy dependencies scan (vuln, config, secrets)
+        id: trivy-fs
+        run: |
+          trivy fs . \
+            --format cyclonedx \
+            --output trivy-fs-report.json \
+            --scanners vuln,misconfig,secret \
+            --exit-code 0
+
+      # конец записи in-toto step'а trivy-scan
+      - name: Trivy scan - record stop
+        run: |
+          in-toto-record stop --step-name trivy-scan --signing-key functionary-key.pem --products trivy-fs-report.json
+          echo "- ✅ Trivy FS scan completed" >> $GITHUB_STEP_SUMMARY
+
+      # проверка Semgrep на критические уязвимости
+      - name: Check Semgrep for critical vulnerabilities
+        run: |
+          echo "Checking Semgrep results for critical vulnerabilities..."
+          if [ -f semgrep-results.json ]; then
+            SEMGREP_CRITICAL=$(jq '[.results[]? | select(.extra.severity == "ERROR")] | length' semgrep-results.json 2>/dev/null || echo "0")
+            echo "Semgrep critical findings: $SEMGREP_CRITICAL"
+            if [ "$SEMGREP_CRITICAL" -gt 0 ]; then
+              echo "::error::Found $SEMGREP_CRITICAL critical vulnerabilities in Semgrep scan"
+              jq '.results[] | select(.extra.severity == "ERROR") | {path: .path, line: .start.line, message: .extra.message}' semgrep-results.json
+              exit 1
+            fi
+          fi
+          echo "- ✅ No critical vulnerabilities in Semgrep" >> $GITHUB_STEP_SUMMARY
+
+      # проверка Trivy на критические уязвимости
+      - name: Check Trivy for critical vulnerabilities
+        run: |
+          echo "Checking Trivy results for critical vulnerabilities..."
+          if [ -f trivy-fs-report.json ]; then
+            TRIVY_CRITICAL=$(jq '[.vulnerabilities[]? | select(.ratings[]?.severity == "critical")] | length' trivy-fs-report.json 2>/dev/null || echo "0")
+            echo "Trivy critical findings: $TRIVY_CRITICAL"
+            if [ "$TRIVY_CRITICAL" -gt 0 ]; then
+              echo "::error::Found $TRIVY_CRITICAL critical vulnerabilities in Trivy scan"
+              jq '.vulnerabilities[] | select(.ratings[]?.severity == "critical") | {id: .id, description: .description}' trivy-fs-report.json
+              exit 1
+            fi
+          fi
+          echo "- ✅ No critical vulnerabilities in Trivy" >> $GITHUB_STEP_SUMMARY
+
+      # начало записи in-toto step'а sbom-generation
+      - name: SBOM-deps generation - record start
+        run: |
+          in-toto-record start --step-name sbom-generation --signing-key functionary-key.pem --materials Dockerfile requirements.txt
+
+      # генерация SBOM через Trivy 
+      - name: Generate dependencies SBOM 
+        id: sbom-deps
+        run: |
+          trivy repo . \
+            --format cyclonedx \
+            --output sbom-dependencies.json \
+            --list-all-pkgs
+
+      # конец записи in-toto step'а sbom-generation
+      - name: SBOM-deps generation - record stop
+        run: |
+          in-toto-record stop --step-name sbom-generation --signing-key functionary-key.pem --products sbom-dependencies.json
+          echo "- ✅ Dependencies SBOM generated (CycloneDX)" >> $GITHUB_STEP_SUMMARY
+
+      # авторизация в GHCR
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # установка buildx для build-push-action
+      - name: Set up Docker Buildx 
+        uses: docker/setup-buildx-action@v3
+
+      # билд образа и пуш его в GHCR
+      - name: Build and push Docker image
+        id: build
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.TAG_NAME }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # сохранение имени и хеша образа для других job
+      - name: Extract image metadata
+        id: image
+        run: |
+          image_name="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}"
+          digest="${{ steps.build.outputs.digest }}"
+          echo "image=$image_name" >> "$GITHUB_OUTPUT"
+          echo "image=$image_name"
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+          echo "digest=$digest"
+          echo "- ✅ Docker image built: \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.TAG_NAME }}\`" >> $GITHUB_STEP_SUMMARY
+
+      # начало записи in-toto step'а docker-sbom
+      - name: Docker build - record start
+        run: |
+          in-toto-record start --step-name docker-sbom --signing-key functionary-key.pem --materials Dockerfile
+
+      # генерация SBOM для образа
+      - name: Generate final SBOM for image
+        id: sbom-image
+        run: |
+          trivy image ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.TAG_NAME }} \
+            --format cyclonedx \
+            --output sbom-image.json \
+            --exit-code 0
+
+      # конец записи in-toto step'а docker-sbom            
+      - name: Docker build - record stop
+        run: |
+          in-toto-record stop --step-name docker-sbom --signing-key functionary-key.pem --products sbom-image.json
+          echo "- ✅ Image SBOM generated (CycloneDX)" >> $GITHUB_STEP_SUMMARY
+
+      # собираем все .link файлы, сгенерированные in-toto-run
+      - name: Collect in-toto link files
+        run: |
+          mkdir -p in-toto-metadata
+          mv *.link in-toto-metadata/ || true
+          cp supply-chain.layout in-toto-metadata/
+          cp functionary-key.pub in-toto-metadata/
+          
+          # Показываем что собрали
+          ls -lah in-toto-metadata/
+          
+          echo "in-toto link metadata collected"
+          
+      # загрузка результатов сканов и SBOM в artifacts
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-artifacts
+          path: |
+            semgrep-results.json
+            trivy-fs-report.json
+            sbom-dependencies.json
+            sbom-image.json
+          retention-days: 90
+
+      # загрузка результатов in-toto в artifacts
+      - name: Upload in-toto metadata
+        uses: actions/upload-artifact@v4
+        with:
+          name: in-toto-metadata
+          path: in-toto-metadata/
+          retention-days: 90
+
+      - name: Collect in-toto metadata summary
+        run: |
+          echo "- ✅ in-toto link files collected" >> $GITHUB_STEP_SUMMARY
+
+  # отдельный job для генерации SLSA provenance
+  generate-slsa-provenance:
+    needs: build-and-attest
+    permissions:
+      id-token: write
+      contents: read
+      packages: write
+      actions: read
+    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_container_slsa3.yml@v2.1.0
+    with:
+      image: ${{ needs.build-and-attest.outputs.image }}:${{ needs.build-and-attest.outputs.tag }}
+      digest: ${{ needs.build-and-attest.outputs.digest }}
+      registry-username: ${{ github.actor }}
+    secrets:
+      registry-password: ${{ secrets.GITHUB_TOKEN }}
+
+  # скачивание и выгрузка SLSA provenance в artifacts
+  collect-slsa-provenance:
+    needs: [build-and-attest, generate-slsa-provenance]
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+      packages: write
+    env:
+      COSIGN_EXPERIMENTAL: "1"
+      IMAGE_WITH_DIGEST: ${{ needs.build-and-attest.outputs.image }}@${{ needs.build-and-attest.outputs.digest }}
+    steps:
+
+      # установка cosign для скачивания slsa provenance
+      - name: Install Cosign
+        run: |
+          curl -sSfL https://github.com/sigstore/cosign/releases/latest/download/cosign-linux-amd64 | sudo tee /usr/local/bin/cosign > /dev/null
+          sudo chmod +x /usr/local/bin/cosign
+
+      # авторизация в GHCR
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # скачивание SLSA provenance и декодирование в statement + predicate
+      - name: Download SLSA provenance
+        run: |
+          set -euo pipefail
+          cosign download attestation "$IMAGE_WITH_DIGEST" \
+            --predicate-type slsaprovenance \
+            > slsa-provenance.jsonl
+          if [ ! -s slsa-provenance.jsonl ]; then
+            echo "SLSA provenance was not found in the registry" >&2
+            exit 1
+          fi
+          first_line=$(head -n 1 slsa-provenance.jsonl)
+          printf '%s' "$first_line" | jq -r '.payload' | base64 --decode > slsa-provenance.statement.json
+          jq '.predicate' slsa-provenance.statement.json > slsa-provenance.predicate.json
+          
+      # загрузка всех артефактов SLSA в artifacts
+      - name: Upload SLSA provenance artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: slsa-provenance
+          path: |
+            slsa-provenance.jsonl
+            slsa-provenance.statement.json
+            slsa-provenance.predicate.json
+          retention-days: 90
+
+      - name: SLSA provenance summary
+        run: |
+          echo "- ✅ SLSA provenance collected (Level 2)" >> $GITHUB_STEP_SUMMARY
+
+  # подпись и аттестация результатов
+  sign-and-attest:
+    needs: [build-and-attest, generate-slsa-provenance, collect-slsa-provenance]
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+      packages: write
+    env:
+      COSIGN_EXPERIMENTAL: "1"
+      IMAGE_WITH_TAG: ${{ needs.build-and-attest.outputs.image }}:${{ needs.build-and-attest.outputs.tag }}
+      IMAGE_WITH_DIGEST: ${{ needs.build-and-attest.outputs.image }}@${{ needs.build-and-attest.outputs.digest }}
+    steps:
+
+      # скан рапозитория 
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      # установка cosign и in-toto 
+      - name: Install cosign
+        run: |
+          curl -sSfL https://github.com/sigstore/cosign/releases/latest/download/cosign-linux-amd64 | sudo tee /usr/local/bin/cosign > /dev/null
+          sudo chmod +x /usr/local/bin/cosign
+          
+          pip install in-toto
+
+      # авторизация в GHCR
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # скачивание результатов сканов и SBOM 
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: security-artifacts
+          path: .
+
+      # скачивание результатов in-toto
+      - name: Download in-toto artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: in-toto-metadata
+          path: in-toto-metadata
+
+      # keyless подпись образа 
+      - name: Sign docker image 
+        run: |
+          COSIGN_EXPERIMENTAL=1 \
+          cosign sign \
+            "${IMAGE_WITH_DIGEST}" \
+            --yes
+          echo "- ✅ Docker image signed (Cosign keyless OIDC)" >> $GITHUB_STEP_SUMMARY
+
+      # аттестация SBOM образа
+      - name: Attest image SBOM
+        run: |
+          if [ -f sbom-image.json ]; then
+          cosign attest \
+            --type https://cyclonedx.org/bom \
+            --predicate sbom-image.json \
+            "${IMAGE_WITH_DIGEST}" \
+            --yes
+          fi
+          echo "- ✅ Image SBOM attested" >> $GITHUB_STEP_SUMMARY
+
+      # аттестация SBOM зависимостей
+      - name: Attest dependency SBOM
+        run: |
+          if [ -f sbom-dependencies.json ]; then
+            cosign attest \
+              --type https://cyclonedx.org/bom \
+              --predicate sbom-dependencies.json \
+              "${IMAGE_WITH_DIGEST}" \
+              --yes
+          fi
+          echo "- ✅ Dependency SBOM attested" >> $GITHUB_STEP_SUMMARY
+
+      # аттестация результатов semgrep         
+      - name: Attest semgrep SAST results
+        run: |
+          if [ -f semgrep-results.json ]; then
+            cosign attest \
+              --type https://semgrep.dev/scan-result/v0.1 \
+              --predicate semgrep-results.json \
+              "${IMAGE_WITH_DIGEST}" \
+              --yes
+          fi
+          echo "- ✅ Semgrep SAST results attested" >> $GITHUB_STEP_SUMMARY
+          
+      # аттестация результатов скана Trivy
+      - name: Attest Trivy fs scan results
+        run: |
+          cosign attest \
+            --type https://aquasecurity.github.io/trivy/vulnerability-scan/v0.1 \
+            --predicate trivy-fs-report.json \
+            "${IMAGE_WITH_DIGEST}" \
+            --yes
+          echo "- ✅ Trivy scan results attested" >> $GITHUB_STEP_SUMMARY
+      
+      # ВЕРИФИКАЦИЯ ВСЕХ ЭТАПОВ, ЧТО ВСЕ ПРОШЛО УСПЕШНО И ПОДПИСАНО
+      # верификация цепочки поставок через in-toto-verify
+      - name: Verify in-toto chain 
+        run: |
+          cd in-toto-metadata
+          in-toto-verify --layout supply-chain.layout --verification-keys functionary-key.pub \
+          --link-dir .
+          echo "- ✅ in-toto supply chain verified" >> $GITHUB_STEP_SUMMARY
+
+      # верификация образа docker
+      - name: Verify docker image
+        run: |
+          COSIGN_EXPERIMENTAL=1 \
+          cosign verify \
+            --certificate-identity "https://github.com/${{ github.repository }}/.github/workflows/secure-supplychain.yml@refs/heads/main" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+            "${IMAGE_WITH_DIGEST}"
+          echo "- ✅ Docker image signature verified" >> $GITHUB_STEP_SUMMARY
+
+      # верификация SBOM аттестата             
+      - name: Verify sbom
+        run: |
+          COSIGN_EXPERIMENTAL=1 \
+          cosign verify-attestation \
+            --type https://cyclonedx.org/bom \
+            --certificate-identity "https://github.com/${{ github.repository }}/.github/workflows/secure-supplychain.yml@refs/heads/main" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+            "${IMAGE_WITH_DIGEST}"
+          echo "- ✅ SBOM attestations verified" >> $GITHUB_STEP_SUMMARY
+
+      # верификация Semgrep аттестата
+      - name: Verify semgrep
+        run: |
+          COSIGN_EXPERIMENTAL=1 \
+          cosign verify-attestation \
+            --type https://semgrep.dev/scan-result/v0.1 \
+            --certificate-identity "https://github.com/${{ github.repository }}/.github/workflows/secure-supplychain.yml@refs/heads/main" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+            "${IMAGE_WITH_DIGEST}"
+          echo "- ✅ Semgrep attestation verified" >> $GITHUB_STEP_SUMMARY
+
+      # верификация Trivy аттестата
+      - name: Verify trivy
+        run: |
+          COSIGN_EXPERIMENTAL=1 \
+          cosign verify-attestation \
+            --type https://aquasecurity.github.io/trivy/vulnerability-scan/v0.1 \
+            --certificate-identity "https://github.com/${{ github.repository }}/.github/workflows/secure-supplychain.yml@refs/heads/main" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+            "${IMAGE_WITH_DIGEST}"
+          echo "- ✅ Trivy attestation verified" >> $GITHUB_STEP_SUMMARY
+
+      - name: Summary - Pipeline completed
+        run: |
+          echo "---" >> $GITHUB_STEP_SUMMARY
+          echo "## 🔒 Supply Chain Pipeline Completed Successfully" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Image**: \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.TAG_NAME }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Digest**: \`${{ needs.build-and-attest.outputs.digest }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Artifacts**: security-artifacts, slsa-provenance, in-toto-metadata" >> $GITHUB_STEP_SUMMARY
+
+  # деплой в докер 
+  deploy-to-self-hosted:
+    needs: [sign-and-attest, build-and-attest]
+    runs-on: [self-hosted, linux]
+    permissions:
+      contents: read
+      packages: read
+    env:
+      IMAGE: ${{ needs.build-and-attest.outputs.image }}
+      TAG: ${{ needs.build-and-attest.outputs.tag }}
+      CONTAINER_NAME: supplychain-sec
+    steps:
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+          
+      - name: Pull image
+        run: |
+          docker pull "${IMAGE}:${TAG}"
+
+      - name: Stop existing container
+        run: |
+          docker rm -f "${CONTAINER_NAME}" || true
+
+      - name: Run updated container
+        run: |
+          docker run -d \
+            --name "${CONTAINER_NAME}" \
+            --restart unless-stopped \
+            -p 7777:7777 \
+            "${IMAGE}:${TAG}"
+          echo "- ✅ Container deployed: \`${CONTAINER_NAME}\` on port 7777" >> $GITHUB_STEP_SUMMARY
