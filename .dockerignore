@@ -4,3 +4,8 @@ __pycache__/
 .github
 requirements.in 
 requirements.lock
+intoto.py
+functionary-key.pub
+functionary-key.pem 
+README.md
+supply-chain.layout 
