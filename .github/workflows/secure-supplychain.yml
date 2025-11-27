@@ -1,11 +1,14 @@
 name: Build & Attest
 
 on:
-  push:
-    branches: [ main ]
-    paths:
-      - 'Dockerfile'
-      - 'app.py'
+  workflow_dispatch:
+
+# on:
+#   push:
+#     branches: [ main ]
+#     paths:
+#       - 'Dockerfile'
+#       - 'app.py'
 
 env:
   REGISTRY: ghcr.io
@@ -353,12 +356,12 @@ jobs:
           set -euo pipefail
           cosign download attestation "$IMAGE_WITH_DIGEST" \
             --predicate-type slsaprovenance \
-            > slsa-provenance.intoto.jsonl
-          if [ ! -s slsa-provenance.intoto.jsonl ]; then
+            > slsa-provenance.jsonl
+          if [ ! -s slsa-provenance.jsonl ]; then
             echo "SLSA provenance was not found in the registry" >&2
             exit 1
           fi
-          first_line=$(head -n 1 slsa-provenance.intoto.jsonl)
+          first_line=$(head -n 1 slsa-provenance.jsonl)
           printf '%s' "$first_line" | jq -r '.payload' | base64 --decode > slsa-provenance.statement.json
           jq '.predicate' slsa-provenance.statement.json > slsa-provenance.predicate.json
           
@@ -368,7 +371,7 @@ jobs:
         with:
           name: slsa-provenance
           path: |
-            slsa-provenance.intoto.jsonl
+            slsa-provenance.jsonl
             slsa-provenance.statement.json
             slsa-provenance.predicate.json
           retention-days: 90
@@ -420,7 +423,7 @@ jobs:
       - name: Checkout slsa-provenance origin
         run: |
           ls -lah slsa-provenance.*
-          sha256sum slsa-provenance.intoto.jsonl slsa-provenance.statement.json slsa-provenance.predicate.json
+          sha256sum slsa-provenance.jsonl slsa-provenance.statement.json slsa-provenance.predicate.json
 
       # скачивание результатов сканов и SBOM 
       - name: Download artifacts
@@ -501,17 +504,7 @@ jobs:
           cosign verify \
             --certificate-identity "https://github.com/${{ github.repository }}/.github/workflows/secure-supplychain.yml@refs/heads/main" \
             --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
-            "${IMAGE_WITH_DIGEST}"
-            
-      # верификация SLSA provenance
-      - name: Verify SLSA provenance
-        run: |
-            # COSIGN_EXPERIMENTAL=1 \
-            # cosign verify-attestation \
-            #   --type https://slsa.dev/provenance/v0.2 \
-            #   --certificate-identity 'https://github.com/slsa-framework/slsa-github-generator/.github/workflows/generator_container_slsa3.yml@refs/tags/v2.1.0' \
-            #   --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
-            #   "${IMAGE_WITH_DIGEST}"
+            "${IMAGE_WITH_DIGEST}"           
 
       # верификация остальных аттестатов             
       - name: Verify semgrep, trivy, sbom
@@ -560,14 +553,13 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### ✍️ Signatures & Attestations" >> $GITHUB_STEP_SUMMARY
           echo "- **Image Signature**: Signed with Cosign (keyless OIDC)" >> $GITHUB_STEP_SUMMARY
-          echo "- **SLSA Provenance**: Build attestation (SLSA L3) downloaded & archived" >> $GITHUB_STEP_SUMMARY
+          echo "- **SLSA Provenance**: Build attestation (SLSA L2) downloaded & archived" >> $GITHUB_STEP_SUMMARY
           echo "- **SBOM Attestation**: Final & dependency SBOMs attested (CycloneDX)" >> $GITHUB_STEP_SUMMARY
           echo "- **SAST Attestation**: Semgrep results attested" >> $GITHUB_STEP_SUMMARY
           echo "- **Trivy Attestation**: Repository scan attested" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### 🔍 Verification" >> $GITHUB_STEP_SUMMARY
           echo "- ✅ Image signature verified (with OIDC certificate identity)" >> $GITHUB_STEP_SUMMARY
-          echo "- ✅ SLSA provenance verified (SLSA generator identity)" >> $GITHUB_STEP_SUMMARY
           echo "- ✅ All attestations verified with certificate identity matching this workflow" >> $GITHUB_STEP_SUMMARY
           echo "- ✅ in-toto supply chain integrity verified" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
@@ -577,7 +569,7 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### 📥 Artifacts" >> $GITHUB_STEP_SUMMARY
           echo "- **security-artifacts**: Scan results and SBOMs" >> $GITHUB_STEP_SUMMARY
-          echo "- **slsa-provenance**: SLSA statement, predicate, and in-toto JSONL" >> $GITHUB_STEP_SUMMARY
+          echo "- **slsa-provenance**: SLSA statement, predicate, and provenance JSONL" >> $GITHUB_STEP_SUMMARY
           echo "- **in-toto-metadata**: Layout, link files, and public key" >> $GITHUB_STEP_SUMMARY
 
   # деплой в докер 
