@@ -82,3 +82,4 @@ Pipeline генерирует следующие артефакты:
 - `security-artifacts` - результаты сканирований и SBOM
 - `slsa-provenance` - SLSA метаданные
 - `in-toto-metadata` - layout, link файлы и публичные ключи
+- `Docker образ` - в Packages проекта
