@@ -116,36 +116,6 @@ jobs:
           in-toto-record stop --step-name trivy-scan --signing-key functionary-key.pem --products trivy-fs-report.json
           echo "- ✅ Trivy FS scan completed" >> $GITHUB_STEP_SUMMARY
 
-      # проверка Semgrep на критические уязвимости
-      - name: Check Semgrep for critical vulnerabilities
-        run: |
-          echo "Checking Semgrep results for critical vulnerabilities..."
-          if [ -f semgrep-results.json ]; then
-            SEMGREP_CRITICAL=$(jq '[.results[]? | select(.extra.severity == "ERROR")] | length' semgrep-results.json 2>/dev/null || echo "0")
-            echo "Semgrep critical findings: $SEMGREP_CRITICAL"
-            if [ "$SEMGREP_CRITICAL" -gt 0 ]; then
-              echo "::error::Found $SEMGREP_CRITICAL critical vulnerabilities in Semgrep scan"
-              jq '.results[] | select(.extra.severity == "ERROR") | {path: .path, line: .start.line, message: .extra.message}' semgrep-results.json
-              exit 1
-            fi
-          fi
-          echo "- ✅ No critical vulnerabilities in Semgrep" >> $GITHUB_STEP_SUMMARY
-
-      # проверка Trivy на критические уязвимости
-      - name: Check Trivy for critical vulnerabilities
-        run: |
-          echo "Checking Trivy results for critical vulnerabilities..."
-          if [ -f trivy-fs-report.json ]; then
-            TRIVY_CRITICAL=$(jq '[.vulnerabilities[]? | select(.ratings[]?.severity == "critical")] | length' trivy-fs-report.json 2>/dev/null || echo "0")
-            echo "Trivy critical findings: $TRIVY_CRITICAL"
-            if [ "$TRIVY_CRITICAL" -gt 0 ]; then
-              echo "::error::Found $TRIVY_CRITICAL critical vulnerabilities in Trivy scan"
-              jq '.vulnerabilities[] | select(.ratings[]?.severity == "critical") | {id: .id, description: .description}' trivy-fs-report.json
-              exit 1
-            fi
-          fi
-          echo "- ✅ No critical vulnerabilities in Trivy" >> $GITHUB_STEP_SUMMARY
-
       # начало записи in-toto step'а sbom-generation
       - name: SBOM-deps generation - record start
         run: |
@@ -164,7 +134,35 @@ jobs:
       - name: SBOM-deps generation - record stop
         run: |
           in-toto-record stop --step-name sbom-generation --signing-key functionary-key.pem --products sbom-dependencies.json
-          echo "- ✅ Dependencies SBOM generated (CycloneDX)" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Dependencies SBOM generated (CycloneDX)" >> $GITHUB_STEP_SUMMARY          
+
+      # проверка Semgrep на критические уязвимости
+      - name: Check Semgrep for ERROR vulnerabilities
+        run: |
+          if [ -f semgrep-results.json ]; then
+            SEMGREP_CRITICAL=$(jq '[.results[]? | select(.extra.severity == "ERROR")] | length' semgrep-results.json 2>/dev/null || echo "0")
+            echo "Semgrep critical findings: $SEMGREP_CRITICAL"
+            if [ "$SEMGREP_CRITICAL" -gt 0 ]; then
+              echo "::error::Found $SEMGREP_CRITICAL critical vulnerabilities in Semgrep scan"
+              jq '.results[] | select(.extra.severity == "ERROR") | {path: .path, line: .start.line, message: .extra.message}' semgrep-results.json
+              exit 1
+            fi
+          fi
+          echo "- ✅ No critical vulnerabilities in Semgrep" >> $GITHUB_STEP_SUMMARY
+
+      # проверка Trivy на критические уязвимости
+      - name: Check Trivy for critical vulnerabilities
+        run: |
+          if [ -f trivy-fs-report.json ]; then
+            TRIVY_CRITICAL=$(jq '[.vulnerabilities[]? | select(.ratings[]?.severity == "critical")] | length' trivy-fs-report.json 2>/dev/null || echo "0")
+            echo "Trivy critical findings: $TRIVY_CRITICAL"
+            if [ "$TRIVY_CRITICAL" -gt 0 ]; then
+              echo "::error::Found $TRIVY_CRITICAL critical vulnerabilities in Trivy scan"
+              jq '.vulnerabilities[] | select(.ratings[]?.severity == "critical") | {id: .id, description: .description}' trivy-fs-report.json
+              exit 1
+            fi
+          fi
+          echo "- ✅ No critical vulnerabilities in Trivy" >> $GITHUB_STEP_SUMMARY
 
       # авторизация в GHCR
       - name: Log in to GHCR
