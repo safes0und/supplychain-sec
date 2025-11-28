@@ -219,6 +219,16 @@ jobs:
         run: |
           in-toto-record stop --step-name docker-sbom --signing-key functionary-key.pem --products sbom-image.json
           echo "- ✅ Image SBOM generated (CycloneDX)" >> $GITHUB_STEP_SUMMARY
+
+      # сканирование образа на уязвимости через SBOM
+      - name: Scan image SBOM for vulnerabilities
+        run: |
+          trivy sbom sbom-image.json \
+            --format table \
+            --exit-code 0
+          echo "- ✅ Image SBOM scanned for vulnerabilities" >> $GITHUB_STEP_SUMMARY
+        continue-on-error: true
+
       # загрузка результатов in-toto в artifacts
       - name: Upload in-toto metadata
         uses: actions/upload-artifact@v4
@@ -293,7 +303,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       # скачивание SLSA provenance и декодирование в statement + predicate
-      - name: Download SLSA provenance
+      - name: Download and decode SLSA provenance
         run: |
           set -euo pipefail
           cosign download attestation "$IMAGE_WITH_DIGEST" \
