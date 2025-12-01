@@ -1,1 +1,4 @@
-aiogram==3.22.0
+nmap
+requests
+warnings
+tkinter
