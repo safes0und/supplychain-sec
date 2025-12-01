@@ -66,7 +66,7 @@ jobs:
       - name: Run Semgrep SAST in sarif
         id: semgrep_sarif
         run: |
-          semgrep --config=auto --sarif --output semgrep-results.sarif . || echo '{"version":"2.1.0","$schema":"https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json","runs":[]}' > semgrep-results.sarif
+          semgrep --config=auto --sarif --output semgrep-results.sarif --max-target-bytes 0 --no-git-ignore . || echo '{"version":"2.1.0","$schema":"https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json","runs":[]}' > semgrep-results.sarif
         continue-on-error: true
 
       # загрузка semgrep-results в GitHub Security
@@ -86,7 +86,7 @@ jobs:
       - name: Run Semgrep SAST in json 
         id: semgrep
         run: |
-          semgrep --config=auto --json --json-output semgrep-results.json . || echo '{"version":"2.1.0","runs":[]}' > semgrep-results.json
+          semgrep --config=auto --json --json-output semgrep-results.json --max-target-bytes 0 --no-git-ignore . || echo '{"version":"2.1.0","runs":[]}' > semgrep-results.json
         continue-on-error: true
 
       # конец записи in-toto step'а sast-scan    
@@ -176,6 +176,11 @@ jobs:
       - name: Set up Docker Buildx 
         uses: docker/setup-buildx-action@v3
 
+      # начало записи in-toto step'а docker-build
+      - name: Docker build - record start
+        run: |
+          in-toto-record start --step-name docker-build --signing-key functionary-key.pem --materials Dockerfile app.py requirements.txt
+
       # билд образа и пуш его в GHCR
       - name: Build and push Docker image
         id: build
@@ -187,6 +192,13 @@ jobs:
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.TAG_NAME }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      # конец записи in-toto step'а docker-build
+      - name: Docker build - record stop
+        run: |
+          echo "${{ steps.build.outputs.digest }}" > docker-digest.txt
+          in-toto-record stop --step-name docker-build --signing-key functionary-key.pem --products docker-digest.txt
+          echo "- ✅ Docker build recorded in in-toto" >> $GITHUB_STEP_SUMMARY
 
       # сохранение имени и хеша образа для других job
       - name: Extract image metadata
@@ -201,7 +213,7 @@ jobs:
           echo "- ✅ Docker image built: \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.TAG_NAME }}\`" >> $GITHUB_STEP_SUMMARY
 
       # начало записи in-toto step'а docker-sbom
-      - name: Docker build - record start
+      - name: Docker SBOM build - record start
         run: |
           in-toto-record start --step-name docker-sbom --signing-key functionary-key.pem --materials Dockerfile
 
@@ -215,7 +227,7 @@ jobs:
             --exit-code 0
 
       # конец записи in-toto step'а docker-sbom            
-      - name: Docker build - record stop
+      - name: Docker SBOM build - record stop
         run: |
           in-toto-record stop --step-name docker-sbom --signing-key functionary-key.pem --products sbom-image.json
           echo "- ✅ Image SBOM generated (CycloneDX)" >> $GITHUB_STEP_SUMMARY
@@ -382,24 +394,17 @@ jobs:
           name: in-toto-metadata
           path: in-toto-metadata
 
-      # keyless подпись образа 
-      - name: Sign docker image 
+      # keyless подпись образа
+      - name: Sign docker image
         run: |
-          COSIGN_EXPERIMENTAL=1 \
-          cosign sign \
-            "${IMAGE_WITH_DIGEST}" \
-            --yes
+          cosign sign "${IMAGE_WITH_DIGEST}" --yes
           echo "- ✅ Docker image signed (Cosign keyless OIDC)" >> $GITHUB_STEP_SUMMARY
 
       # аттестация SBOM образа
       - name: Attest image SBOM
         run: |
           if [ -f sbom-image.json ]; then
-          cosign attest \
-            --type https://cyclonedx.org/bom \
-            --predicate sbom-image.json \
-            "${IMAGE_WITH_DIGEST}" \
-            --yes
+            cosign attest --type https://cyclonedx.org/bom --predicate sbom-image.json "${IMAGE_WITH_DIGEST}" --yes
           fi
           echo "- ✅ Image SBOM attested" >> $GITHUB_STEP_SUMMARY
 
@@ -407,34 +412,22 @@ jobs:
       - name: Attest dependency SBOM
         run: |
           if [ -f sbom-dependencies.json ]; then
-            cosign attest \
-              --type https://cyclonedx.org/bom \
-              --predicate sbom-dependencies.json \
-              "${IMAGE_WITH_DIGEST}" \
-              --yes
+            cosign attest --type https://cyclonedx.org/bom --predicate sbom-dependencies.json "${IMAGE_WITH_DIGEST}" --yes
           fi
           echo "- ✅ Dependency SBOM attested" >> $GITHUB_STEP_SUMMARY
 
-      # аттестация результатов semgrep         
+      # аттестация результатов semgrep
       - name: Attest semgrep SAST results
         run: |
           if [ -f semgrep-results.json ]; then
-            cosign attest \
-              --type https://semgrep.dev/scan-result/v0.1 \
-              --predicate semgrep-results.json \
-              "${IMAGE_WITH_DIGEST}" \
-              --yes
+            cosign attest --type https://semgrep.dev/scan-result/v0.1 --predicate semgrep-results.json "${IMAGE_WITH_DIGEST}" --yes
           fi
           echo "- ✅ Semgrep SAST results attested" >> $GITHUB_STEP_SUMMARY
-          
-      # аттестация результатов скана Trivy
+
+      # аттестация результатов Trivy
       - name: Attest Trivy fs scan results
         run: |
-          cosign attest \
-            --type https://aquasecurity.github.io/trivy/vulnerability-scan/v0.1 \
-            --predicate trivy-fs-report.json \
-            "${IMAGE_WITH_DIGEST}" \
-            --yes
+          cosign attest --type https://aquasecurity.github.io/trivy/vulnerability-scan/v0.1 --predicate trivy-fs-report.json "${IMAGE_WITH_DIGEST}" --yes
           echo "- ✅ Trivy scan results attested" >> $GITHUB_STEP_SUMMARY
       
       # ВЕРИФИКАЦИЯ ВСЕХ ЭТАПОВ, ЧТО ВСЕ ПРОШЛО УСПЕШНО И ПОДПИСАНО
